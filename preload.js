@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('fm', {
     },
     app: {
         getConfig: () => ipcRenderer.invoke('app:getConfig'),
+        saveConfig: (cfg) => ipcRenderer.invoke('app:saveConfig', cfg),
         updateTrayMenu: () => ipcRenderer.invoke('app:updateTrayMenu')
     },
     on: {

@@ -17,11 +17,14 @@
         timer: null,
         config: null,
         hideControls: false,
-        trayEnabled: false
+        trayEnabled: false,
+        settingsOpen: false,
+        pendingImages: []
     };
 
     // ========== DOM 引用 ==========
     const dom = {
+        // 主体
         mainImage: document.getElementById('mainImage'),
         prevBtn: document.getElementById('prevBtn'),
         nextBtn: document.getElementById('nextBtn'),
@@ -36,12 +39,35 @@
         emptyState: document.getElementById('emptyState'),
         dropZone: document.getElementById('dropZone'),
         viewerArea: document.getElementById('viewerArea'),
+        viewerBg: document.getElementById('viewerBg'),
         pinBtn: document.getElementById('pinBtn'),
         closeBtn: document.getElementById('closeBtn'),
         titleBar: document.getElementById('titleBar'),
         titleButtons: document.getElementById('titleButtons'),
         toolbar: document.getElementById('toolbar'),
-        app: document.getElementById('app')
+        app: document.getElementById('app'),
+        settingsBtn: document.getElementById('settingsBtn'),
+        // 设置面板
+        settingsOverlay: document.getElementById('settingsOverlay'),
+        settingsPanel: document.getElementById('settingsPanel'),
+        settingsCloseBtn: document.getElementById('settingsCloseBtn'),
+        settingsCancelBtn: document.getElementById('settingsCancelBtn'),
+        settingsSaveBtn: document.getElementById('settingsSaveBtn'),
+        settingsImagesList: document.getElementById('settingsImagesList'),
+        settingsNewImagePath: document.getElementById('settingsNewImagePath'),
+        settingsMode: document.getElementById('settingsMode'),
+        settingsAutoPlay: document.getElementById('settingsAutoPlay'),
+        settingsInterval: document.getElementById('settingsInterval'),
+        settingsFit: document.getElementById('settingsFit'),
+        settingsHideControls: document.getElementById('settingsHideControls'),
+        settingsWidth: document.getElementById('settingsWidth'),
+        settingsHeight: document.getElementById('settingsHeight'),
+        settingsColorPrimary: document.getElementById('settingsColorPrimary'),
+        settingsColorSecondary: document.getElementById('settingsColorSecondary'),
+        settingsColorText: document.getElementById('settingsColorText'),
+        settingsColorPrimaryPreview: document.getElementById('settingsColorPrimaryPreview'),
+        settingsColorSecondaryPreview: document.getElementById('settingsColorSecondaryPreview'),
+        settingsColorTextPreview: document.getElementById('settingsColorTextPreview')
     };
 
     // ========== Electron / 桌面运行时 API ==========
@@ -111,6 +137,19 @@
         }
     }
 
+    function runtimeSaveConfig(newConfig, callback) {
+        const api = getRuntimeAPI();
+        if (api && api.app && api.app.saveConfig) {
+            api.app.saveConfig(newConfig).then(function (res) {
+                callback(res && res.success);
+            }).catch(function () {
+                callback(false);
+            });
+        } else {
+            callback(false);
+        }
+    }
+
     // ========== 工具函数 ==========
     function isValidImageFile(filename) {
         if (!filename) return false;
@@ -132,6 +171,15 @@
     function hideElement(el) { if (el) el.classList.add('hidden'); }
 
     // ========== 视图渲染 ==========
+    function updateViewerBgState() {
+        const hasImages = state.images.length > 0;
+        if (hasImages) {
+            dom.viewerArea.classList.add('has-image');
+        } else {
+            dom.viewerArea.classList.remove('has-image');
+        }
+    }
+
     function updateViewState() {
         const hasImages = state.images.length > 0;
         if (hasImages) {
@@ -148,6 +196,7 @@
             hideElement(dom.imageContainer);
             hideElement(dom.gridContainer);
         }
+        updateViewerBgState();
     }
 
     function renderCurrentImage() {
@@ -298,6 +347,27 @@
         }
     }
 
+    // ========== 主题应用 ==========
+    function applyTheme(theme) {
+        if (!theme) return;
+        const root = document.documentElement;
+        if (theme.primaryColor) root.style.setProperty('--theme-primary', theme.primaryColor);
+        if (theme.secondaryColor) root.style.setProperty('--theme-secondary', theme.secondaryColor);
+        if (theme.textColor) root.style.setProperty('--theme-text', theme.textColor);
+    }
+
+    function syncUIToState() {
+        dom.intervalSelect.value = String(state.intervalMs);
+        dom.fitSelect.value = state.imageFit;
+        if (state.autoPlay) {
+            dom.playBtn.textContent = '⏸ 暂停';
+            dom.playBtn.classList.add('active');
+        }
+        if (state.mode === 'grid') {
+            dom.modeBtn.textContent = '轮播';
+        }
+    }
+
     // ========== 托盘菜单事件处理 ==========
     function handleTrayAction(action) {
         switch (action) {
@@ -322,12 +392,186 @@
                 runtimeOpenFolder();
                 break;
             case 'quit':
-                const api = getRuntimeAPI();
-                if (api && api.window && api.window.close) {
-                    api.window.close();
-                }
+                runtimeClose();
                 break;
         }
+    }
+
+    // ========== 设置面板 ==========
+    function openSettings() {
+        state.settingsOpen = true;
+        state.pendingImages = state.images.slice();
+
+        // 填充表单
+        dom.settingsMode.value = state.mode;
+        dom.settingsAutoPlay.checked = state.autoPlay;
+        dom.settingsInterval.value = String(state.intervalMs);
+        dom.settingsFit.value = state.imageFit;
+        dom.settingsHideControls.checked = state.hideControls;
+
+        const win = state.config && state.config.window ? state.config.window : {};
+        dom.settingsWidth.value = win.defaultWidth || 340;
+        dom.settingsHeight.value = win.defaultHeight || 340;
+
+        const theme = state.config && state.config.theme ? state.config.theme : {};
+        dom.settingsColorPrimary.value = theme.primaryColor || '#ff79c6';
+        dom.settingsColorSecondary.value = theme.secondaryColor || '#fee101';
+        dom.settingsColorText.value = theme.textColor || '#424242';
+        dom.settingsColorPrimaryPreview.style.backgroundColor = dom.settingsColorPrimary.value;
+        dom.settingsColorSecondaryPreview.style.backgroundColor = dom.settingsColorSecondary.value;
+        dom.settingsColorTextPreview.style.backgroundColor = dom.settingsColorText.value;
+
+        renderSettingsImagesList();
+        showElement(dom.settingsOverlay);
+    }
+
+    function closeSettings() {
+        state.settingsOpen = false;
+        state.pendingImages = [];
+        hideElement(dom.settingsOverlay);
+    }
+
+    function renderSettingsImagesList() {
+        dom.settingsImagesList.innerHTML = '';
+        state.pendingImages.forEach(function (imgPath, idx) {
+            const item = document.createElement('div');
+            item.className = 'settings-image-thumb';
+            item.title = imgPath + '\n点击移除';
+
+            const img = document.createElement('img');
+            img.src = resolveImagePath(imgPath);
+            img.alt = '图片-' + (idx + 1);
+            item.appendChild(img);
+
+            const removeBtn = document.createElement('div');
+            removeBtn.className = 'remove-btn';
+            removeBtn.textContent = '✕';
+            removeBtn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                state.pendingImages.splice(idx, 1);
+                renderSettingsImagesList();
+            });
+            item.appendChild(removeBtn);
+
+            item.addEventListener('click', function () {
+                state.pendingImages.splice(idx, 1);
+                renderSettingsImagesList();
+            });
+
+            dom.settingsImagesList.appendChild(item);
+        });
+
+        if (state.pendingImages.length === 0) {
+            dom.settingsImagesList.innerHTML = '<div style="font-size:11px;color:#aaa;padding:4px 0;">暂无图片，请拖入图片或输入路径添加</div>';
+        }
+    }
+
+    function saveSettings() {
+        const newConfig = state.config ? JSON.parse(JSON.stringify(state.config)) : {};
+
+        // 窗口设置
+        if (!newConfig.window) newConfig.window = {};
+        newConfig.window.hideControls = dom.settingsHideControls.checked;
+        newConfig.window.defaultWidth = parseInt(dom.settingsWidth.value, 10) || 340;
+        newConfig.window.defaultHeight = parseInt(dom.settingsHeight.value, 10) || 340;
+
+        // 播放设置
+        if (!newConfig.viewer) newConfig.viewer = {};
+        newConfig.viewer.mode = dom.settingsMode.value;
+        newConfig.viewer.autoPlay = dom.settingsAutoPlay.checked;
+        newConfig.viewer.intervalMs = parseInt(dom.settingsInterval.value, 10) || 3000;
+        newConfig.viewer.imageFit = dom.settingsFit.value;
+
+        // 主题
+        if (!newConfig.theme) newConfig.theme = {};
+        newConfig.theme.primaryColor = dom.settingsColorPrimary.value;
+        newConfig.theme.secondaryColor = dom.settingsColorSecondary.value;
+        newConfig.theme.textColor = dom.settingsColorText.value;
+
+        // 图片列表
+        newConfig.images = state.pendingImages.filter(isValidImageFile);
+
+        // 保存到文件
+        runtimeSaveConfig(newConfig, function (ok) {
+            if (ok) {
+                state.config = newConfig;
+            }
+            // 应用设置
+            state.images = newConfig.images || [];
+            state.mode = newConfig.viewer.mode || 'slide';
+            state.autoPlay = newConfig.viewer.autoPlay === true;
+            state.intervalMs = newConfig.viewer.intervalMs || 3000;
+            state.imageFit = newConfig.viewer.imageFit || 'contain';
+            state.hideControls = newConfig.window.hideControls === true;
+
+            applyTheme(newConfig.theme);
+            applyHideControls(state.hideControls);
+            syncUIToState();
+            renderCurrentImage();
+            if (state.mode === 'grid') renderGridView();
+            if (state.autoPlay) startAutoPlay();
+
+            closeSettings();
+        });
+    }
+
+    function bindSettingsEvents() {
+        dom.settingsBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            openSettings();
+        });
+
+        dom.settingsCloseBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            closeSettings();
+        });
+
+        dom.settingsCancelBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            closeSettings();
+        });
+
+        dom.settingsSaveBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            saveSettings();
+        });
+
+        dom.settingsOverlay.addEventListener('click', function (e) {
+            if (e.target === dom.settingsOverlay) {
+                closeSettings();
+            }
+        });
+
+        // 回车添加图片路径
+        dom.settingsNewImagePath.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const val = dom.settingsNewImagePath.value.trim();
+                if (val && isValidImageFile(val)) {
+                    state.pendingImages.push(val);
+                    renderSettingsImagesList();
+                    dom.settingsNewImagePath.value = '';
+                }
+            }
+        });
+
+        // 颜色预览
+        dom.settingsColorPrimary.addEventListener('input', function () {
+            dom.settingsColorPrimaryPreview.style.backgroundColor = dom.settingsColorPrimary.value;
+        });
+        dom.settingsColorSecondary.addEventListener('input', function () {
+            dom.settingsColorSecondaryPreview.style.backgroundColor = dom.settingsColorSecondary.value;
+        });
+        dom.settingsColorText.addEventListener('input', function () {
+            dom.settingsColorTextPreview.style.backgroundColor = dom.settingsColorText.value;
+        });
+
+        // ESC 关闭设置
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && state.settingsOpen) {
+                closeSettings();
+            }
+        });
     }
 
     // ========== 事件绑定 ==========
@@ -357,6 +601,7 @@
         });
 
         document.addEventListener('keydown', function (e) {
+            if (state.settingsOpen) return;
             if (e.key === 'ArrowRight') nextImage();
             else if (e.key === 'ArrowLeft') prevImage();
             else if (e.key === 'Escape') closeApp();
@@ -396,7 +641,7 @@
             }
         });
 
-        // 注册托盘菜单事件
+        // 托盘菜单事件
         const api = getRuntimeAPI();
         if (api && api.on && api.on.trayAction) {
             state.trayEnabled = true;
@@ -406,26 +651,13 @@
         }
     }
 
-    // ========== 主题应用 ==========
-    function applyTheme(cfg) {
-        if (!cfg || !cfg.theme) return;
-        const root = document.documentElement;
-        const t = cfg.theme;
-        if (t.primaryColor) root.style.setProperty('--theme-primary', t.primaryColor);
-        if (t.secondaryColor) root.style.setProperty('--theme-secondary', t.secondaryColor);
-        if (t.backgroundColor) root.style.setProperty('--theme-bg', t.backgroundColor);
-        if (t.textColor) root.style.setProperty('--theme-text', t.textColor);
-        if (t.accentColor) root.style.setProperty('--theme-accent', t.accentColor);
-    }
-
     // ========== 启动流程 ==========
     function loadConfigAndInit() {
         runtimeGetConfig(function (runtimeCfg) {
             if (runtimeCfg && runtimeCfg.window) {
                 state.config = runtimeCfg;
-                applyTheme(runtimeCfg);
+                applyTheme(runtimeCfg.theme);
 
-                // 应用视图配置
                 if (runtimeCfg.viewer) {
                     const v = runtimeCfg.viewer;
                     state.mode = v.mode || 'slide';
@@ -434,25 +666,17 @@
                     state.imageFit = v.imageFit || 'contain';
                 }
 
-                // 应用窗口配置
                 if (runtimeCfg.window) {
                     applyHideControls(runtimeCfg.window.hideControls === true);
-                    if (runtimeCfg.window.background) {
-                        dom.app.style.backgroundColor = runtimeCfg.window.background;
-                    }
-                    if (runtimeCfg.window.borderRadius) {
-                        dom.app.style.borderRadius = runtimeCfg.window.borderRadius + 'px';
-                    }
                 }
 
-                // 加载图片列表
                 if (Array.isArray(runtimeCfg.images)) {
                     state.images = runtimeCfg.images.slice().filter(isValidImageFile);
                 }
 
-                syncUIFromState();
+                syncUIToState();
+                finishInit();
             } else {
-                // 回退：从 app.json 静态加载
                 fetch(CONFIG_PATH)
                     .then(function (res) {
                         if (!res.ok) throw new Error('加载失败');
@@ -460,7 +684,7 @@
                     })
                     .then(function (cfg) {
                         state.config = cfg;
-                        applyTheme(cfg);
+                        applyTheme(cfg.theme);
 
                         if (cfg.viewer) {
                             const v = cfg.viewer;
@@ -478,12 +702,12 @@
                             state.images = cfg.images.filter(isValidImageFile);
                         }
 
-                        syncUIFromState();
+                        syncUIToState();
                         finishInit();
                     })
                     .catch(function () {
                         state.images = [];
-                        syncUIFromState();
+                        syncUIToState();
                         finishInit();
                     });
                 return;
@@ -492,23 +716,12 @@
         });
     }
 
-    function syncUIFromState() {
-        dom.intervalSelect.value = String(state.intervalMs);
-        dom.fitSelect.value = state.imageFit;
-        if (state.autoPlay) {
-            dom.playBtn.textContent = '⏸ 暂停';
-            dom.playBtn.classList.add('active');
-        }
-        if (state.mode === 'grid') {
-            dom.modeBtn.textContent = '轮播';
-        }
-    }
-
     function finishInit() {
         renderCurrentImage();
         if (state.mode === 'grid') renderGridView();
         if (state.autoPlay) startAutoPlay();
         bindEvents();
+        bindSettingsEvents();
         runtimeShow();
     }
 

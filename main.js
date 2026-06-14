@@ -223,6 +223,23 @@ ipcMain.handle('app:getConfig', () => {
     return { success: true, config: appConfig };
 });
 
+ipcMain.handle('app:saveConfig', (event, newConfig) => {
+    if (!newConfig || typeof newConfig !== 'object') {
+        return { success: false, error: 'Invalid config' };
+    }
+    const cfgPath = path.join(__dirname, CONFIG_FILE);
+    try {
+        const jsonStr = JSON.stringify(newConfig, null, 4);
+        fs.writeFileSync(cfgPath, jsonStr, 'utf-8');
+        appConfig = newConfig;
+        updateTrayMenu();
+        return { success: true };
+    } catch (err) {
+        console.error('[PicPin] 保存配置失败:', err);
+        return { success: false, error: err.message };
+    }
+});
+
 ipcMain.handle('app:updateTrayMenu', () => {
     updateTrayMenu();
     return { success: true };
