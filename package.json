@@ -1,0 +1,61 @@
+{
+    "name": "picpin",
+    "version": "1.0.0",
+    "description": "轻量级桌面图片展示挂件，支持托盘运行、轮播/网格视图、拖拽添加图片",
+    "main": "main.js",
+    "scripts": {
+        "start": "electron .",
+        "pack": "electron-builder --dir",
+        "dist": "electron-builder",
+        "dist:win": "electron-builder --win",
+        "dist:portable": "electron-builder --win portable"
+    },
+    "author": "PicPin Contributors",
+    "license": "MIT",
+    "devDependencies": {
+        "electron": "^28.0.0",
+        "electron-builder": "^24.9.1"
+    },
+    "build": {
+        "appId": "com.picpin.app",
+        "productName": "PicPin",
+        "copyright": "Copyright © 2026 PicPin Contributors",
+        "directories": {
+            "output": "dist"
+        },
+        "files": [
+            "index.html",
+            "app.js",
+            "style.css",
+            "app.json",
+            "config.json",
+            "main.js",
+            "preload.js",
+            "favicon.ico",
+            "assets/**/*"
+        ],
+        "win": {
+            "target": [
+                {
+                    "target": "nsis",
+                    "arch": ["x64"]
+                },
+                {
+                    "target": "portable",
+                    "arch": ["x64"]
+                }
+            ],
+            "icon": "favicon.ico"
+        },
+        "nsis": {
+            "oneClick": false,
+            "allowToChangeInstallationDirectory": true,
+            "createDesktopShortcut": true,
+            "createStartMenuShortcut": true,
+            "shortcutName": "PicPin"
+        },
+        "portable": {
+            "artifactName": "${productName}-${version}-portable.exe"
+        }
+    }
+}

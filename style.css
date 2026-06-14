@@ -339,3 +339,24 @@ html, body {
 .tool-select:hover, .tool-select:focus {
     border-color: var(--theme-primary);
 }
+
+/* ========== 隐藏按钮模式（托盘模式）========== */
+
+body.hide-controls .title-bar {
+    height: 0;
+    overflow: hidden;
+}
+
+body.hide-controls .main-area {
+    border-radius: var(--radius);
+}
+
+body.hide-controls .app-container {
+    border-radius: var(--radius);
+}
+
+/* 隐藏按钮后悬停时显示标题栏 */
+body.hide-controls .app-container:hover .title-bar {
+    height: 28px;
+    overflow: visible;
+}

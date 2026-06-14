@@ -8,7 +8,8 @@
         "minWidth": 200,
         "minHeight": 200,
         "background": "rgba(255, 255, 255, 0.95)",
-        "borderRadius": 10
+        "borderRadius": 10,
+        "hideControls": true
     },
 
     "viewer": {
@@ -26,6 +27,21 @@
         "backgroundColor": "#ffffff",
         "textColor": "#424242",
         "accentColor": "#ff4081"
+    },
+
+    "tray": {
+        "tooltip": "PicPin 📌",
+        "menu": [
+            { "label": "显示/隐藏", "action": "toggle" },
+            { "label": "---------" },
+            { "label": "📌 置顶窗口", "action": "pin" },
+            { "label": "⏸ 播放/暂停", "action": "play" },
+            { "label": "🔲 网格视图", "action": "grid" },
+            { "label": "---------" },
+            { "label": "📂 打开图片目录", "action": "openFolder" },
+            { "label": "---------" },
+            { "label": "❌ 退出", "action": "quit" }
+        ]
     },
 
     "images": []

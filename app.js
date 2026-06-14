@@ -1,36 +1,9 @@
 (function () {
     'use strict';
 
-    // ========== 常量与配置 ==========
+    // ========== 常量 ==========
     const CONFIG_PATH = './app.json';
     const VALID_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'];
-
-    // 兼容窗口环境 API（Electron / 桌面挂件运行时）
-    const windowRuntime = {
-        setAlwaysOnTop: function (flag) {
-            const api = window.fm || window.kt;
-            if (api && api.window && api.window.setAlwaysOnTop) {
-                api.window.setAlwaysOnTop({ isAlwaysOnTop: flag });
-                return true;
-            }
-            return false;
-        },
-        close: function () {
-            const api = window.fm || window.kt;
-            if (api && api.window && api.window.close) {
-                api.window.close();
-                return true;
-            }
-            window.close();
-            return true;
-        },
-        show: function () {
-            const api = window.fm || window.kt;
-            if (api && api.window && api.window.show) {
-                api.window.show().catch(function () {});
-            }
-        }
-    };
 
     // ========== 运行时状态 ==========
     const state = {
@@ -42,7 +15,9 @@
         imageFit: 'contain',
         isPinned: false,
         timer: null,
-        config: null
+        config: null,
+        hideControls: false,
+        trayEnabled: false
     };
 
     // ========== DOM 引用 ==========
@@ -63,8 +38,78 @@
         viewerArea: document.getElementById('viewerArea'),
         pinBtn: document.getElementById('pinBtn'),
         closeBtn: document.getElementById('closeBtn'),
+        titleBar: document.getElementById('titleBar'),
+        titleButtons: document.getElementById('titleButtons'),
+        toolbar: document.getElementById('toolbar'),
         app: document.getElementById('app')
     };
+
+    // ========== Electron / 桌面运行时 API ==========
+    function getRuntimeAPI() {
+        return window.fm || window.kt || null;
+    }
+
+    function runtimeSetAlwaysOnTop(flag) {
+        const api = getRuntimeAPI();
+        if (api && api.window && api.window.setAlwaysOnTop) {
+            api.window.setAlwaysOnTop({ isAlwaysOnTop: flag });
+            return true;
+        }
+        return false;
+    }
+
+    function runtimeClose() {
+        const api = getRuntimeAPI();
+        if (api && api.window && api.window.close) {
+            api.window.close();
+            return true;
+        }
+        return false;
+    }
+
+    function runtimeShow() {
+        const api = getRuntimeAPI();
+        if (api && api.window && api.window.show) {
+            api.window.show().catch(function () {});
+            return true;
+        }
+        return false;
+    }
+
+    function runtimeToggle() {
+        const api = getRuntimeAPI();
+        if (api && api.window && api.window.toggle) {
+            api.window.toggle();
+            return true;
+        }
+        return false;
+    }
+
+    function runtimeOpenFolder() {
+        const api = getRuntimeAPI();
+        if (api && api.window && api.window.openFolder) {
+            api.window.openFolder();
+            return true;
+        }
+        return false;
+    }
+
+    function runtimeGetConfig(callback) {
+        const api = getRuntimeAPI();
+        if (api && api.app && api.app.getConfig) {
+            api.app.getConfig().then(function (res) {
+                if (res && res.success && res.config) {
+                    callback(res.config);
+                } else {
+                    callback(null);
+                }
+            }).catch(function () {
+                callback(null);
+            });
+        } else {
+            callback(null);
+        }
+    }
 
     // ========== 工具函数 ==========
     function isValidImageFile(filename) {
@@ -147,14 +192,14 @@
     // ========== 播放与导航 ==========
     function nextImage() {
         if (state.images.length === 0) return;
-        state.currentIndex++;
+        state.currentIndex = (state.currentIndex + 1) % state.images.length;
         renderCurrentImage();
         if (state.mode === 'grid') renderGridView();
     }
 
     function prevImage() {
         if (state.images.length === 0) return;
-        state.currentIndex--;
+        state.currentIndex = (state.currentIndex - 1 + state.images.length) % state.images.length;
         renderCurrentImage();
         if (state.mode === 'grid') renderGridView();
     }
@@ -200,11 +245,7 @@
 
     function togglePin() {
         state.isPinned = !state.isPinned;
-        const ok = windowRuntime.setAlwaysOnTop(state.isPinned);
-        if (!ok && state.isPinned) {
-            // 在纯浏览器环境中提示一下
-            console.log('当前环境不支持窗口置顶');
-        }
+        runtimeSetAlwaysOnTop(state.isPinned);
         if (state.isPinned) {
             dom.pinBtn.textContent = '📍';
             dom.pinBtn.classList.add('active');
@@ -215,13 +256,12 @@
     }
 
     function closeApp() {
-        windowRuntime.close();
+        runtimeClose();
     }
 
     // ========== 拖拽添加图片 ==========
     function addDroppedFiles(files) {
         if (!files || files.length === 0) return;
-        let loaded = 0;
         for (let i = 0; i < files.length; i++) {
             const file = files[i];
             const isImageType = file.type && file.type.indexOf('image/') === 0;
@@ -232,7 +272,6 @@
                 const reader = new FileReader();
                 reader.onload = function (e) {
                     state.images.push(e.target.result);
-                    loaded++;
                     if (state.images.length === 1) state.currentIndex = 0;
                     renderCurrentImage();
                     if (state.mode === 'grid') renderGridView();
@@ -240,8 +279,54 @@
                 };
                 reader.readAsDataURL(file);
             } catch (err) {
-                console.warn('读取图片失败:', file.name, err);
+                console.warn('[PicPin] 读取图片失败:', file.name, err);
             }
+        }
+    }
+
+    // ========== 隐藏按钮模式 ==========
+    function applyHideControls(hide) {
+        state.hideControls = hide;
+        if (hide) {
+            hideElement(dom.titleButtons);
+            hideElement(dom.toolbar);
+            document.body.classList.add('hide-controls');
+        } else {
+            showElement(dom.titleButtons);
+            showElement(dom.toolbar);
+            document.body.classList.remove('hide-controls');
+        }
+    }
+
+    // ========== 托盘菜单事件处理 ==========
+    function handleTrayAction(action) {
+        switch (action) {
+            case 'toggle':
+                runtimeToggle();
+                break;
+            case 'pin':
+                togglePin();
+                break;
+            case 'play':
+                toggleAutoPlay();
+                break;
+            case 'grid':
+                if (state.mode === 'slide') toggleViewMode();
+                else {
+                    state.mode = 'slide';
+                    dom.modeBtn.textContent = '网格';
+                    updateViewState();
+                }
+                break;
+            case 'openFolder':
+                runtimeOpenFolder();
+                break;
+            case 'quit':
+                const api = getRuntimeAPI();
+                if (api && api.window && api.window.close) {
+                    api.window.close();
+                }
+                break;
         }
     }
 
@@ -310,9 +395,18 @@
                 addDroppedFiles(e.dataTransfer.files);
             }
         });
+
+        // 注册托盘菜单事件
+        const api = getRuntimeAPI();
+        if (api && api.on && api.on.trayAction) {
+            state.trayEnabled = true;
+            api.on.trayAction(function (action) {
+                handleTrayAction(action);
+            });
+        }
     }
 
-    // ========== 主题与配置应用 ==========
+    // ========== 主题应用 ==========
     function applyTheme(cfg) {
         if (!cfg || !cfg.theme) return;
         const root = document.documentElement;
@@ -324,13 +418,78 @@
         if (t.accentColor) root.style.setProperty('--theme-accent', t.accentColor);
     }
 
-    function applyViewerDefaults(cfg) {
-        if (!cfg) return;
-        const v = cfg.viewer || {};
-        state.mode = v.mode || 'slide';
-        state.autoPlay = v.autoPlay === true;
-        state.intervalMs = v.intervalMs || 3000;
-        state.imageFit = v.imageFit || 'contain';
+    // ========== 启动流程 ==========
+    function loadConfigAndInit() {
+        runtimeGetConfig(function (runtimeCfg) {
+            if (runtimeCfg && runtimeCfg.window) {
+                state.config = runtimeCfg;
+                applyTheme(runtimeCfg);
+
+                // 应用视图配置
+                if (runtimeCfg.viewer) {
+                    const v = runtimeCfg.viewer;
+                    state.mode = v.mode || 'slide';
+                    state.autoPlay = v.autoPlay === true;
+                    state.intervalMs = v.intervalMs || 3000;
+                    state.imageFit = v.imageFit || 'contain';
+                }
+
+                // 应用窗口配置
+                if (runtimeCfg.window) {
+                    applyHideControls(runtimeCfg.window.hideControls === true);
+                    if (runtimeCfg.window.background) {
+                        dom.app.style.backgroundColor = runtimeCfg.window.background;
+                    }
+                    if (runtimeCfg.window.borderRadius) {
+                        dom.app.style.borderRadius = runtimeCfg.window.borderRadius + 'px';
+                    }
+                }
+
+                // 加载图片列表
+                if (Array.isArray(runtimeCfg.images)) {
+                    state.images = runtimeCfg.images.slice().filter(isValidImageFile);
+                }
+
+                syncUIFromState();
+            } else {
+                // 回退：从 app.json 静态加载
+                fetch(CONFIG_PATH)
+                    .then(function (res) {
+                        if (!res.ok) throw new Error('加载失败');
+                        return res.json();
+                    })
+                    .then(function (cfg) {
+                        state.config = cfg;
+                        applyTheme(cfg);
+
+                        if (cfg.viewer) {
+                            const v = cfg.viewer;
+                            state.mode = v.mode || 'slide';
+                            state.autoPlay = v.autoPlay === true;
+                            state.intervalMs = v.intervalMs || 3000;
+                            state.imageFit = v.imageFit || 'contain';
+                        }
+
+                        if (cfg.window) {
+                            applyHideControls(cfg.window.hideControls === true);
+                        }
+
+                        if (Array.isArray(cfg.images)) {
+                            state.images = cfg.images.filter(isValidImageFile);
+                        }
+
+                        syncUIFromState();
+                        finishInit();
+                    })
+                    .catch(function () {
+                        state.images = [];
+                        syncUIFromState();
+                        finishInit();
+                    });
+                return;
+            }
+            finishInit();
+        });
     }
 
     function syncUIFromState() {
@@ -345,37 +504,12 @@
         }
     }
 
-    // ========== 启动流程 ==========
-    function loadConfigAndInit() {
-        fetch(CONFIG_PATH)
-            .then(function (response) {
-                if (!response.ok) throw new Error('配置文件读取失败');
-                return response.json();
-            })
-            .then(function (cfg) {
-                state.config = cfg;
-                applyTheme(cfg);
-                applyViewerDefaults(cfg);
-                if (Array.isArray(cfg.images)) {
-                    state.images = cfg.images.slice();
-                }
-                syncUIFromState();
-                finishInit();
-            })
-            .catch(function (err) {
-                console.warn('无法加载 app.json，使用默认配置启动:', err.message);
-                state.images = [];
-                syncUIFromState();
-                finishInit();
-            });
-    }
-
     function finishInit() {
         renderCurrentImage();
         if (state.mode === 'grid') renderGridView();
         if (state.autoPlay) startAutoPlay();
         bindEvents();
-        windowRuntime.show();
+        runtimeShow();
     }
 
     function init() {
