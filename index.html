@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PicPin - 桌面图片挂件</title>
+    <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+    <div class="app-container" id="app">
+        <div class="title-bar">
+            <div class="drag-area"></div>
+            <div class="title-buttons">
+                <button class="btn pin-btn" id="pinBtn" title="置顶/取消置顶">📌</button>
+                <button class="btn close-btn" id="closeBtn" title="关闭">✕</button>
+            </div>
+        </div>
+
+        <div class="main-area">
+            <div class="viewer-area" id="viewerArea">
+                <div class="image-container" id="imageContainer">
+                    <img id="mainImage" src="" alt="">
+                    <div class="nav-btn nav-prev" id="prevBtn">‹</div>
+                    <div class="nav-btn nav-next" id="nextBtn">›</div>
+                    <div class="counter" id="counter">0 / 0</div>
+                </div>
+
+                <div class="grid-container hidden" id="gridContainer">
+                    <div class="grid-list" id="gridList"></div>
+                </div>
+
+                <div class="empty-state hidden" id="emptyState">
+                    <div class="empty-icon">🖼️</div>
+                    <div class="empty-title">暂无图片</div>
+                    <div class="empty-hint">将图片拖入窗口<br>或在 assets 目录添加图片</div>
+                </div>
+
+                <div class="drop-zone hidden" id="dropZone">
+                    <div class="drop-icon">📥</div>
+                    <div class="drop-text">松开以添加图片</div>
+                </div>
+            </div>
+
+            <div class="toolbar">
+                <button class="tool-btn" id="playBtn">▶ 播放</button>
+                <select class="tool-select" id="intervalSelect">
+                    <option value="1000">1秒</option>
+                    <option value="3000" selected>3秒</option>
+                    <option value="5000">5秒</option>
+                    <option value="10000">10秒</option>
+                </select>
+                <button class="tool-btn" id="modeBtn">网格</button>
+                <select class="tool-select" id="fitSelect">
+                    <option value="contain">适应</option>
+                    <option value="cover">填充</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <script src="./app.js"></script>
+</body>
+</html>

@@ -1,0 +1,32 @@
+{
+    "name": "PicPin",
+    "version": "1.0.0",
+
+    "window": {
+        "defaultWidth": 340,
+        "defaultHeight": 340,
+        "minWidth": 200,
+        "minHeight": 200,
+        "background": "rgba(255, 255, 255, 0.95)",
+        "borderRadius": 10
+    },
+
+    "viewer": {
+        "mode": "slide",
+        "autoPlay": true,
+        "intervalMs": 3000,
+        "imageFit": "contain",
+        "gridItemSize": 70,
+        "gridGap": 8
+    },
+
+    "theme": {
+        "primaryColor": "#ff79c6",
+        "secondaryColor": "#fee101",
+        "backgroundColor": "#ffffff",
+        "textColor": "#424242",
+        "accentColor": "#ff4081"
+    },
+
+    "images": []
+}

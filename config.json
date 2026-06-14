@@ -1,0 +1,21 @@
+{
+    "browserWindowOptions": {
+        "width": 340,
+        "height": 340,
+        "type": "toolbar",
+        "frame": false,
+        "resizable": true,
+        "transparent": true,
+        "hasShadow": false,
+        "alwaysOnTop": false
+    },
+    "configure": {
+        "devTools": false,
+        "isolateSessionLevel": "app",
+        "webSecurity": true,
+        "recordRectInfo": true,
+        "showWhenStartup": true,
+        "closeWarn": false,
+        "disableContextMenu": false
+    }
+}
